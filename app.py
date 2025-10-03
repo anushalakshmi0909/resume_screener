@@ -1,7 +1,4 @@
 from dotenv import load_dotenv
-
-load_dotenv()
-
 import streamlit as st
 import os
 import io
@@ -10,20 +7,24 @@ from PIL import Image
 from pdf2image import convert_from_bytes
 import google.generativeai as genai
 
+# Load environment variables
+load_dotenv()
+
 # Path to Poppler bin folder
 poppler_path = os.getenv("POPPLER_PATH", r"C:\Users\anushalakshmi.s\poppler\poppler-25.07.0\Library\bin")
 
+# Configure Gemini API
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-def get_gemini_response(input,pdf_content,prompt):
-    model=genai.GenerativeModel('gemini-pro-latest')
-    response=model.generate_content([input,pdf_content[0],prompt])
+# --- Helper Functions ---
+def get_gemini_response(input_text, pdf_content, prompt):
+    model = genai.GenerativeModel('gemini-pro-latest')
+    response = model.generate_content([input_text, pdf_content[0], prompt])
     return response.text
 
 def input_pdf_setup(uploaded_file):
     if uploaded_file is not None:
         images = convert_from_bytes(uploaded_file.read(), poppler_path=poppler_path)
-        # images = pdf2image.convert_from_bytes(uploaded_file.read())
         first_page = images[0]
 
         img_byte_arr = io.BytesIO()
@@ -39,22 +40,56 @@ def input_pdf_setup(uploaded_file):
         return pdf_parts
     else:
         raise FileNotFoundError("No file uploaded.")
-    
-# Streamlit App
 
+def display_response(title, response):
+    st.markdown(f"### {title}")
+    st.markdown(
+        f"""
+        <div style="
+            background-color:#f4f6f8; 
+            padding:15px; 
+            border-radius:10px; 
+            border:1px solid #ccc; 
+            font-size:15px; 
+            line-height:1.6;
+            color:#1c2833;
+        ">
+            {response.replace(chr(10), '<br>')}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+# --- Streamlit App UI ---
 st.set_page_config(page_title="ATS Resume Screener", layout="wide")
-st.header("ATS Resume Screener using Gemini Pro Vision")
-input_text = st.text_area("Job Description", key="input", height=150)
-uploaded_file = st.file_uploader("Upload Resume (PDF)", type=["pdf"])
-if uploaded_file is not None:
-    st.write("PDF uploaded successfully.")
 
-submit1 = st.button("What is the summary of the resume?")
-submit2 = st.button("What are the key skills in the resume?")
-submit3 = st.button("How well does the resume match the job description?")
-submit4 = st.button("How can I improvise my skills to match the job description?")
-submit5 = st.button("Rate the resume on a scale of 1-10 and provide a brief explanation.")
+st.markdown("<h1 style='text-align: center; color: #2E86C1;'>📄 AI-Powered ATS Resume Screener</h1>", unsafe_allow_html=True)
 
+col1, col2 = st.columns(2)
+
+with col1:
+    input_text = st.text_area("📝 Job Description", key="input", height=250)
+
+with col2:
+    uploaded_file = st.file_uploader("📂 Upload Resume (PDF)", type=["pdf"])
+    if uploaded_file is not None:
+        st.success("✅ Resume uploaded successfully!")
+
+st.divider()
+st.markdown("### 🔍 Choose an Evaluation Type")
+
+colA, colB, colC = st.columns(3)
+with colA:
+    submit1 = st.button("📌 Resume Summary")
+    submit2 = st.button("🛠 Key Skills")
+with colB:
+    submit3 = st.button("⚖ Fit for Role")
+    submit4 = st.button("📉 Skills Gap")
+with colC:
+    submit5 = st.button("⭐ ATS Scoring")
+
+# --- Predefined Prompts ---
 input_prompt_strength_weakness = (
     "You are an experienced HR professional with technical knowledge in Data Science, Full Stack Development, and Cloud Computing. "
     "Based on the resume and the job description provided, analyze the candidate's strengths and weaknesses specifically in relation to the requirements of this role. "
@@ -84,17 +119,6 @@ input_prompt_hr_summary = (
     "Based on the resume and job description, provide a brief summary that clearly outlines the candidate’s main strengths, potential weaknesses, and overall suitability for the role."
 )
 
-input_prompt_hr_multi_role = (
-    "You are an experienced HR professional with extensive experience in evaluating candidates for technical roles in Data Science, Full Stack Development, DevOps, SDE, Data Analyst, Big Data Enginering and Cloud Computing. "
-    "Given the candidate's resume and multiple job descriptions, analyze the candidate's strengths, weaknesses, and overall fit for each role from an HR perspective. "
-    "For each role, provide:\n"
-    "1. Key strengths relevant to the role\n"
-    "2. Weaknesses or gaps that may affect performance\n"
-    "3. HR insights on cultural fit, potential for growth, and readiness for the role\n"
-    "4. A final recommendation (shortlist, interview, or training needed)\n\n"
-    "Present the analysis role-wise in a clear and professional format suitable for HR decision-making."
-)
-
 input_prompt_ats_scanner = (
     "You are an automated Applicant Tracking System (ATS) that evaluates resumes for technical roles in Data Science, Full Stack Development, and Cloud Computing. "
     "Given a candidate's resume and a job description, perform the following analysis:\n"
@@ -105,40 +129,57 @@ input_prompt_ats_scanner = (
     "Present the output clearly and in a structured ATS-like format."
 )
 
+# --- Button Actions ---
 if submit1:
     if uploaded_file is not None:
         pdf_content = input_pdf_setup(uploaded_file)
         response = get_gemini_response(input_text, pdf_content, input_prompt_hr_summary)
-        st.text_area("Response", value=response, height=200)
+        display_response("📌 Resume Summary", response)
     else:
-        st.write("Please upload a resume PDF file.")
+        st.warning("⚠ Please upload a resume PDF file.")
 elif submit2:
     if uploaded_file is not None:
         pdf_content = input_pdf_setup(uploaded_file)
         response = get_gemini_response(input_text, pdf_content, input_prompt_strength_weakness)
-        st.text_area("Response", value=response, height=200)
+        display_response("🛠 Key Skills", response)
     else:
-        st.write("Please upload a resume PDF file.")
+        st.warning("⚠ Please upload a resume PDF file.")
 elif submit3:
     if uploaded_file is not None:
         pdf_content = input_pdf_setup(uploaded_file)
         response = get_gemini_response(input_text, pdf_content, input_prompt_fit)
-        st.text_area("Response", value=response, height=200)
+        display_response("⚖ Fit for Role", response)
     else:
-        st.write("Please upload a resume PDF file.")
+        st.warning("⚠ Please upload a resume PDF file.")
 elif submit4:
     if uploaded_file is not None:
         pdf_content = input_pdf_setup(uploaded_file)
         response = get_gemini_response(input_text, pdf_content, input_prompt_skills_gap)
-        st.text_area("Response", value=response, height=200)
+        display_response("📉 Skills Gap", response)
     else:
-        st.write("Please upload a resume PDF file.")
+        st.warning("⚠ Please upload a resume PDF file.")
 elif submit5:
     if uploaded_file is not None:
         pdf_content = input_pdf_setup(uploaded_file)
         response = get_gemini_response(input_text, pdf_content, input_prompt_ats_scanner)
-        st.text_area("Response", value=response, height=200)
+        display_response("⭐ ATS Scoring", response)
     else:
-        st.write("Please upload a resume PDF file.")
+        st.warning("⚠ Please upload a resume PDF file.")
 
-prompt = st.text_area("Enter your prompt", height=100, value="Based on the job description, rate the resume on a scale of 1-10 and provide a brief explanation.")
+# --- Custom Prompt Section ---
+st.divider()
+st.markdown("### ✨ Custom HR Prompt")
+
+custom_prompt = st.text_area(
+    "Enter your custom prompt for analysis:",
+    height=120,
+    placeholder="E.g., Suggest improvements for project section of the resume..."
+)
+
+if st.button("Run Custom Analysis"):
+    if uploaded_file is not None:
+        pdf_content = input_pdf_setup(uploaded_file)
+        response = get_gemini_response(input_text, pdf_content, custom_prompt)
+        display_response("✨ Custom Analysis Result", response)
+    else:
+        st.warning("⚠ Please upload a resume PDF file first.")
